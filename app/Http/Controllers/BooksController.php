@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use App\Jobs\RetreiveBookContentsJob;
 
 class BooksController extends Controller
 {
@@ -19,28 +20,56 @@ class BooksController extends Controller
 
     public function index(Request $request)
     {
-        // @TODO implement
-        $books = Book::all();
+        $query = Book::with(['authors', 'bookContents', 'reviews']);
 
+        if ($request->has('title')) {
+            $searchTerm = $request->input('title');
+            $query->where(function($q) use ($searchTerm) {
+                $q->where('title', 'LIKE', '%' . $searchTerm . '%')
+                ->orWhereRaw('LOWER(title) LIKE ?', ['%' . strtolower($searchTerm) . '%']);
+            });
+        }
+        if ($request->has('authors')) {
+            $authorIds = explode(',', $request->input('authors'));
+            $query->whereHas('authors', function($q) use ($authorIds) {
+                $q->whereIn('authors.id', $authorIds);
+            });
+        }
+    
+        $sortColumn = $request->input('sortColumn', 'title');
+        $sortDirection = $request->input('sortDirection', 'ASC');
+        
+        if ($sortColumn === 'avg_review') {
+            $query->withAvg('reviews', 'review')
+                ->orderBy('reviews_avg_review', $sortDirection);
+        } else {
+            $query->orderBy($sortColumn, $sortDirection);
+        }
+    
+        $perPage = 15;
+        $books = $query->paginate($perPage);
+    
         return BookResource::collection($books);
     }
 
     public function store(PostBookRequest $request)
     {
-        // @TODO implement
         try {
-            // Validasi input yang diperlukan
+            if (is_array($request->input('isbn'))) {
+                throw ValidationException::withMessages([
+                    'isbn' => ['ISBN must not be an array'],
+                ]);
+            }
             $validated = $request->validate([
-                'isbn' => 'required|string|max:13',
+                'isbn' => 'required|numeric|unique:books,isbn|digits:13',
                 'title' => 'required|string|max:255',
                 'description' => 'required|string',
                 'price' => 'required|numeric|min:0',
                 'published_year' => 'required|integer|min:0',
-                'authors' => 'required|array',
-                'authors.*' => 'exists:authors,id',
+                'authors' => 'required|array|min:1',
+                'authors.*' => 'integer|exists:authors,id',
             ]);
     
-            // Membuat instance baru dari Book dan menyimpan data yang divalidasi
             $book = new Book();
             $book->isbn = $validated['isbn'];
             $book->title = $validated['title'];
@@ -49,11 +78,14 @@ class BooksController extends Controller
             $book->published_year = $validated['published_year'];
             $book->save();
     
-            // Menyinkronkan hubungan penulis (authors) dengan buku
             $book->authors()->sync($validated['authors']);
+            $book = Book::with(['authors', 'bookContents'])->find($book->id);
     
-            // Mengembalikan response dengan resource buku yang baru dibuat
-            return new BookResource($book);
+            RetreiveBookContentsJob::dispatch($book);
+    
+            return (new BookResource($book))
+                ->response()
+                ->setStatusCode(201);
     
         } catch (ValidationException $e) {
             return response()->json([
@@ -66,15 +98,16 @@ class BooksController extends Controller
                 'status' => 'error',
                 'message' => 'Database error',
                 'error' => $e->getMessage()
-            ], 500);
+            ], 422);
         } catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'An unexpected error occurred',
                 'error' => $e->getMessage()
-            ], 500);
+            ], 422);
         }
     }
+    
 
     public function destroy(int $bookId, Request $request)
     {

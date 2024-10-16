@@ -19,9 +19,9 @@ Route::middleware('auth:api')->get('/user', function (Request $request) {
 });
 Route::post('/users/create', 'AuthController@create');
 
+Route::get('/books', 'BooksController@index');
 Route::group(['middleware' => ['check.admin']], function () {
     // Crud Books
-    Route::get('/books', 'BooksController@index');
     Route::get('/books/{bookId}', 'BooksController@details');
     Route::post('/books', 'BooksController@store');
     Route::delete('/books/{bookId}', 'BooksController@destroy');

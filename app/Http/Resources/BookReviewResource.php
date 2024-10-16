@@ -16,10 +16,9 @@ class BookReviewResource extends JsonResource
     {
         return [
             'id' => $this->id,
-            'book_id' => $this->book_id,
-            'user_id' => $this->user_id,
             'review' => $this->review,
-            'comment' => $this->comment
+            'comment' => $this->comment,
+            'user' => new AuthResource($this->whenLoaded('user')),
         ];
     }
 }

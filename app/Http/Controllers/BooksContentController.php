@@ -17,7 +17,6 @@ class BooksContentController extends Controller
         try {
             // @TODO implement
             $bookcontent = new BookContent();
-            // Validasi input untuk review
             $validated = $request->validate([
                 'label' => 'required|string',
                 'title' => 'required|string|max:1000',
