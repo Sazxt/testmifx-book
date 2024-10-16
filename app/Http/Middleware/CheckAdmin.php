@@ -17,18 +17,33 @@ class CheckAdmin
      */
     public function handle(Request $request, Closure $next)
     {
-        $user = User::where('api_token', $request->bearerToken())->first();
+         // Ambil token dari request
+        $token = $request->bearerToken();
 
-        if (!$user) {
+        // // Periksa apakah token ada
+        if ($token) {
+            $user = User::where('api_token', $token)->first();
+            if ($user)
+            {
+                return $next($request);
+            }
+        }
+
+        // // Cari pengguna berdasarkan token
+        $user = User::where('api_token', $token)->first();
+
+      // Periksa apakah pengguna sudah login (terautentikasi)
+        if (!$request->user()) {
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
-        if (!$user->is_admin) {
+        // Cek apakah pengguna adalah admin
+        if (!$request->user()->is_admin) {
             return response()->json(['message' => 'Forbidden. Admin access required.'], 403);
         }
 
-        $request->merge(['user' => $user]);
 
+        // Lanjutkan request
         return $next($request);
     }
 }

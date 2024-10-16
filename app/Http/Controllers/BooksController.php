@@ -29,37 +29,44 @@ class BooksController extends Controller
     {
         // @TODO implement
         try {
+            // Validasi input yang diperlukan
             $validated = $request->validate([
-                'title' => 'sometimes|required|string|max:255',
-                'author' => 'sometimes|required|string|max:255',
-                'description' => 'sometimes|required|string',
-                'price' => 'sometimes|required|numeric|min:0',
-                'published_year' => 'sometimes|required|numeric|min:0',
+                'isbn' => 'required|string|max:13',
+                'title' => 'required|string|max:255',
+                'description' => 'required|string',
+                'price' => 'required|numeric|min:0',
+                'published_year' => 'required|integer|min:0',
+                'authors' => 'required|array',
+                'authors.*' => 'exists:authors,id',
             ]);
     
+            // Membuat instance baru dari Book dan menyimpan data yang divalidasi
             $book = new Book();
-            $book->isbn = $validated["isbn"];
-            $book->title = $validated["'title'"];
-            $book->description = $validated["description"];
-            $book->price = $validated["price"];
-            $book->published_year = $validated["published_year"];
+            $book->isbn = $validated['isbn'];
+            $book->title = $validated['title'];
+            $book->description = $validated['description'];
+            $book->price = $validated['price'];
+            $book->published_year = $validated['published_year'];
             $book->save();
+    
+            // Menyinkronkan hubungan penulis (authors) dengan buku
+            $book->authors()->sync($validated['authors']);
+    
+            // Mengembalikan response dengan resource buku yang baru dibuat
             return new BookResource($book);
-        }
-        catch (ValidationException $e) {
+    
+        } catch (ValidationException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Validation failed',
                 'errors' => $e->errors()
             ], 422);
-    
         } catch (QueryException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Database error',
                 'error' => $e->getMessage()
             ], 500);
-    
         } catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
